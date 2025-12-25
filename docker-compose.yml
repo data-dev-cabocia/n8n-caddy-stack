@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: n8n-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - ./volumes/pg_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # ※ ここ（ports）は削除：Caddy経由のみ公開
+    environment:
+      N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE}
+      N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD}
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: ${N8N_PORT}
+      N8N_PROTOCOL: ${N8N_PROTOCOL}
+      TZ: ${TZ}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+      # あると便利：外向きURL（Webhook等）
+      WEBHOOK_URL: "https://${DOMAIN}"
+    volumes:
+      - ./volumes/n8n_data:/home/node/.n8n
+
+  auth-manager:
+    image: ghcr.io/data-dev-cabocia/auth-manager:latest
+    container_name: auth-manager
+    restart: always
+    # portsは削除：Caddy経由のみ公開
+    environment:
+      YAHOO_CLIENT_ID: ${YAHOO_CLIENT_ID}
+      YAHOO_CLIENT_SECRET: ${YAHOO_CLIENT_SECRET}
+      YAHOO_REDIRECT_URI: ${YAHOO_REDIRECT_URI}
+      NEXTENGINE_CLIENT_ID: ${NEXTENGINE_CLIENT_ID}
+      NEXTENGINE_CLIENT_SECRET: ${NEXTENGINE_CLIENT_SECRET}
+      NEXTENGINE_REDIRECT_URI: ${NEXTENGINE_REDIRECT_URI}
+      N8N_API_BASE: ${N8N_API_BASE}
+      N8N_API_TOKEN: ${N8N_API_TOKEN}
+      STORE_SELLER_ID: ${STORE_SELLER_ID:-}
+      STORE_PUBLIC_KEY_PATH: ${STORE_PUBLIC_KEY_PATH:-}
+      STORE_KEY_VERSION: ${STORE_KEY_VERSION:-1}
+      ROOT_PATH: ${ROOT_PATH:-/auth-manager}
+    volumes:
+      - ./auth-manager/volumes/auth_manager_data:/app/data
+      - ./auth-manager/keys/yahoo_api_public.key:/app/keys/yahoo_api_public.key:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2
+    container_name: caddy
