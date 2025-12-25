@@ -75,6 +75,22 @@ services:
       retries: 3
       start_period: 40s
 
+
   caddy:
     image: caddy:2
     container_name: caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./volumes/caddy_data:/data
+      - ./volumes/caddy_config:/config
+    depends_on:
+      - n8n
+      - auth-manager
+
