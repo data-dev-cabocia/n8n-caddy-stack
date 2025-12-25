@@ -1,9 +1,3 @@
-ご指示通り、Xserver VPS固有の「パケットフィルタ設定」と「OS側のファイアウォール設定」の手順を追加し、PostgreSQLのポートに関する注釈を削除した **決定版のREADME** です。
-
-そのまま `README.md` として保存して使える形式で作成しました。
-
----
-
 # n8n Production Stack on Xserver VPS
 
 このリポジトリは、Xserver VPS 上でワークフロー自動化ツール **n8n** を運用するための Docker Compose 構成です。
