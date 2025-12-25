@@ -1,13 +1,13 @@
-提示された `docker-compose.yml` に基づいて、すぐに使える構成の **README.md** を作成しました。
+ご指示通り、Xserver VPS固有の「パケットフィルタ設定」と「OS側のファイアウォール設定」の手順を追加し、PostgreSQLのポートに関する注釈を削除した **決定版のREADME** です。
 
-このREADMEは、プロジェクトの概要、セットアップ手順、環境変数の説明、そして重要な **Caddyの設定（Caddyfile）** までを網羅しています。
+そのまま `README.md` として保存して使える形式で作成しました。
 
 ---
 
-# n8n Production Stack with Auth Manager & Caddy
+# n8n Production Stack on Xserver VPS
 
-このリポジトリは、ワークフロー自動化ツール **n8n** をセキュアな本番環境で運用するための Docker Compose 構成です。
-PostgreSQL によるデータ永続化、Caddy による SSL 自動化（HTTPS）、および外部 API 連携用のカスタム認証マネージャー（Auth Manager）を含んでいます。
+このリポジトリは、Xserver VPS 上でワークフロー自動化ツール **n8n** を運用するための Docker Compose 構成です。
+Caddy による SSL 自動化（HTTPS）と、外部 API 連携用のカスタム認証マネージャー（Auth Manager）を含んでいます。
 
 ## 🏗 アーキテクチャ構成
 
@@ -15,8 +15,42 @@ PostgreSQL によるデータ永続化、Caddy による SSL 自動化（HTTPS�
 | --- | --- | --- |
 | **n8n** | ワークフロー自動化エンジン | `5678` |
 | **PostgreSQL** | n8n の設定・実行履歴データの永続化 (v16) | `5432` |
-| **Auth Manager** | Yahoo! / Next Engine 等の OAuth トークン管理・更新 | `8000` |
+| **Auth Manager** | Yahoo! / Next Engine 等の OAuth トークン管理 | `8000` |
 | **Caddy** | リバースプロキシ、自動 SSL 証明書発行・更新 | `80`, `443` |
+
+---
+
+## 🛡 Xserver VPS ポート開放設定
+
+本番運用を開始する前に、Xserver VPS の管理パネルと OS の両方でポート（80番, 443番）を許可する必要があります。
+
+### 1. VPS管理パネル（パケットフィルタ）の設定
+
+1. **Xserver VPS 管理コンソール** にログインします。
+2. 対象サーバーの **「パケットフィルタ設定」** をクリックします。
+3. 以下のポートが「許可」になっているか確認し、なっていなければ設定を追加・変更してください。
+* **Web (80)**: 許可 (TCP)
+* **SSL (443)**: 許可 (TCP)
+* *SSH (22)*: 許可 (作業用)
+
+
+
+### 2. OS側のファイアウォール設定 (Ubuntuの場合)
+
+サーバーにSSH接続し、`ufw` コマンドで HTTP/HTTPS 通信を許可します。
+
+```bash
+# ポート80と443を許可
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# 設定の再読み込み
+sudo ufw reload
+
+# ステータスの確認（Status: active で 80/443 が ALLOW になっていること）
+sudo ufw status
+
+```
 
 ---
 
@@ -24,7 +58,7 @@ PostgreSQL によるデータ永続化、Caddy による SSL 自動化（HTTPS�
 
 ### 1. ディレクトリ構成の準備
 
-以下のディレクトリ構造になるようにファイルとフォルダを準備します。
+サーバー上で以下のディレクトリ構造になるように準備します。
 
 ```
 .
@@ -32,8 +66,8 @@ PostgreSQL によるデータ永続化、Caddy による SSL 自動化（HTTPS�
 ├── .env
 ├── Caddyfile
 ├── volumes/
-│   ├── pg_data/          # DBデータ用（自動生成）
-│   └── n8n_data/         # n8nデータ用（自動生成）
+│   ├── pg_data/          # DBデータ用
+│   └── n8n_data/         # n8nデータ用
 └── auth-manager/
     ├── volumes/
     │   └── auth_manager_data/
@@ -44,7 +78,7 @@ PostgreSQL によるデータ永続化、Caddy による SSL 自動化（HTTPS�
 
 ### 2. 環境変数の設定 (.env)
 
-`.env` ファイルを作成し、以下の変数を設定してください。
+`.env` ファイルを作成し、自身のドメインや認証情報を設定してください。
 
 ```ini
 # --- General ---
@@ -85,11 +119,11 @@ ROOT_PATH=/auth-manager
 
 ### 3. Caddyfile の作成
 
-Caddy がリバースプロキシとして機能し、n8n と Auth Manager へトラフィックを振り分けるための設定ファイル `Caddyfile` を作成します。
+リバースプロキシ設定ファイル `Caddyfile` を作成します。これにより SSL が自動適用されます。
 
 ```caddyfile
 {
-    # メールアドレスを設定しておくと、SSL証明書期限切れ等の通知が届きます（任意）
+    # SSL証明書期限切れ等の通知用メールアドレス（任意）
     # email your-email@example.com
 }
 
@@ -107,9 +141,9 @@ Caddy がリバースプロキシとして機能し、n8n と Auth Manager へ�
 
 ```
 
-### 4. docker-compose.yml の補足修正
+### 4. docker-compose.yml の確認
 
-`caddy` サービスが `Caddyfile` を読み込み、外部ポート（80/443）を開放するように、`docker-compose.yml` の `caddy` 部分を以下のように記述・確認してください。
+`caddy` サービスが外部ポートを開放し、設定ファイルを読み込むようになっているか確認してください。
 
 ```yaml
   caddy:
@@ -129,18 +163,9 @@ Caddy がリバースプロキシとして機能し、n8n と Auth Manager へ�
 
 ```
 
-※ また、ファイルの末尾にボリューム定義を追加してください：
-
-```yaml
-volumes:
-  caddy_data:
-  caddy_config:
-
-```
+*(末尾の volumes 定義に `caddy_data`, `caddy_config` も必要です)*
 
 ### 5. 起動
-
-コンテナをビルド・起動します。
 
 ```bash
 docker-compose up -d
@@ -151,16 +176,10 @@ docker-compose up -d
 
 ## ✅ 動作確認
 
-起動後、ブラウザで以下のURLにアクセスして確認します。
+ブラウザでアクセスして確認します。
 
 1. **n8n**: `https://your-domain.com/`
-* Basic認証（設定した場合）を経て、n8nのエディタ画面が表示されること。
-
-
 2. **Auth Manager**: `https://your-domain.com/auth-manager/`
-* Auth Manager のヘルスチェック応答やUIが表示されること。
-
-
 
 ---
 
@@ -170,8 +189,6 @@ docker-compose up -d
 
 ```bash
 docker-compose logs -f
-# 特定のサービスのみ
-docker-compose logs -f n8n
 
 ```
 
@@ -182,4 +199,5 @@ docker-compose logs -f n8n
 ---
 
 ## ⚠️ 注意事項
+
 * **認証情報**: `.env` ファイルには API キーやパスワードが含まれるため、Git リポジトリにはコミットしないでください（`.gitignore` に追加推奨）。
