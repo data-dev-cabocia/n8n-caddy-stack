@@ -27,7 +27,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    # ※ ここ（ports）は削除：Caddy経由のみ公開
     environment:
       N8N_BASIC_AUTH_ACTIVE: ${N8N_BASIC_AUTH_ACTIVE}
       N8N_BASIC_AUTH_USER: ${N8N_BASIC_AUTH_USER}
@@ -42,7 +41,6 @@ services:
       DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
-      # あると便利：外向きURL（Webhook等）
       WEBHOOK_URL: "https://${DOMAIN}"
     volumes:
       - ./volumes/n8n_data:/home/node/.n8n
@@ -51,7 +49,6 @@ services:
     image: ghcr.io/data-dev-cabocia/auth-manager:latest
     container_name: auth-manager
     restart: always
-    # portsは削除：Caddy経由のみ公開
     environment:
       YAHOO_CLIENT_ID: ${YAHOO_CLIENT_ID}
       YAHOO_CLIENT_SECRET: ${YAHOO_CLIENT_SECRET}
