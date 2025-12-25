@@ -29,7 +29,7 @@ Caddy による SSL 自動化（HTTPS）と、外部 API 連携（Yahoo!ショ�
 
 
 
-### 2. OS側のファイアウォール設定 (Ubuntuの場合)
+### 2. OS側のファイアウォール設定 (Ubuntuの場合)　※Xserverの場合は不要
 
 サーバーにSSH接続し、`ufw` コマンドで HTTP/HTTPS 通信を許可します。
 
