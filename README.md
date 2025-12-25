@@ -76,10 +76,11 @@ sudo ufw status
 ### 2. 環境変数の設定 (.env)
 
 `.env` ファイルを作成し、以下の項目を設定してください。
+**`DOMAIN` 変数にご自身のドメインを指定することで、設定全体に反映されます。**
 
 ```ini
 # --- General ---
-DOMAIN=n8n.japancaviar.jp
+DOMAIN=your-domain.com
 ACME_EMAIL=your-email@example.com
 TZ=Asia/Tokyo
 
@@ -93,17 +94,17 @@ POSTGRES_PORT=5432
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_BASIC_AUTH_USER=admin
 N8N_BASIC_AUTH_PASSWORD=secure_n8n_password
-N8N_HOST=n8n.japancaviar.jp
+N8N_HOST=${DOMAIN}
 N8N_PORT=5678
 N8N_PROTOCOL=https
 
 # --- Auth Manager (Yahoo / NextEngine) ---
 YAHOO_CLIENT_ID=your_yahoo_client_id
 YAHOO_CLIENT_SECRET=your_yahoo_secret
-YAHOO_REDIRECT_URI=https://n8n.japancaviar.jp/auth-manager/yahoo/callback
+YAHOO_REDIRECT_URI=https://${DOMAIN}/auth-manager/yahoo/callback
 NEXTENGINE_CLIENT_ID=your_ne_id
 NEXTENGINE_CLIENT_SECRET=your_ne_secret
-NEXTENGINE_REDIRECT_URI=https://n8n.japancaviar.jp/auth-manager/nextengine/callback
+NEXTENGINE_REDIRECT_URI=https://${DOMAIN}/auth-manager/nextengine/callback
 
 # --- Auth Manager Integration ---
 N8N_API_BASE=http://n8n:5678
@@ -161,11 +162,11 @@ docker-compose up -d
 
 起動後、数秒〜1分程度でSSL証明書が自動発行されます。ブラウザでアクセスして確認します。
 
-1. **n8n**: `https://n8n.japancaviar.jp/`
+1. **n8n**: `https://your-domain.com/`
 * Basic認証（設定時）を経てエディタが表示されること。
 
 
-2. **Auth Manager**: `https://n8n.japancaviar.jp/auth-manager/`
+2. **Auth Manager**: `https://your-domain.com/auth-manager/`
 * Auth Manager のUIまたはレスポンスが表示されること。
 
 
