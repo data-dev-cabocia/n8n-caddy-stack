@@ -1,7 +1,7 @@
 # n8n Production Stack on Xserver VPS
 
 このリポジトリは、Xserver VPS 上でワークフロー自動化ツール **n8n** を運用するための Docker Compose 構成です。
-Caddy による SSL 自動化（HTTPS）と、外部 API 連携用のカスタム認証マネージャー（Auth Manager）を含んでいます。
+Caddy による SSL 自動化（HTTPS）と、外部 API 連携（Yahoo!ショッピング/ネクストエンジン）用のカスタム認証マネージャー（Auth Manager）を統合しています。
 
 ## 🏗 アーキテクチャ構成
 
@@ -10,11 +10,11 @@ Caddy による SSL 自動化（HTTPS）と、外部 API 連携用のカスタ�
 | **n8n** | ワークフロー自動化エンジン | `5678` |
 | **PostgreSQL** | n8n の設定・実行履歴データの永続化 (v16) | `5432` |
 | **Auth Manager** | Yahoo! / Next Engine 等の OAuth トークン管理 | `8000` |
-| **Caddy** | リバースプロキシ、自動 SSL 証明書発行・更新 | `80`, `443` |
+| **Caddy** | リバースプロキシ、自動 SSL、セキュリティヘッダー付与 | `80`, `443` |
 
 ---
 
-## 🛡 Xserver VPS ポート開放設定
+## 🛡 Xserver VPS 事前設定
 
 本番運用を開始する前に、Xserver VPS の管理パネルと OS の両方でポート（80番, 443番）を許可する必要があります。
 
@@ -52,31 +52,35 @@ sudo ufw status
 
 ### 1. ディレクトリ構成の準備
 
-サーバー上で以下のディレクトリ構造になるように準備します。
+リポジトリ（または作業ディレクトリ）は以下の構造であることを前提としています。
 
-```
+```text
 .
 ├── docker-compose.yml
 ├── .env
-├── Caddyfile
-├── volumes/
-│   ├── pg_data/          # DBデータ用
-│   └── n8n_data/         # n8nデータ用
-└── auth-manager/
-    ├── volumes/
-    │   └── auth_manager_data/
-    └── keys/
-        └── yahoo_api_public.key  # Yahoo API用公開鍵
+├── caddy/
+│   └── Caddyfile             # Caddy設定ファイル
+├── auth-manager/
+│   ├── keys/
+│   │   └── yahoo_api_public.key  # 事前に配置が必要
+│   └── volumes/
+│       └── auth_manager_data/    # 自動生成
+└── volumes/                  # データ永続化（自動生成）
+    ├── n8n_data/
+    ├── pg_data/
+    ├── caddy_data/
+    └── caddy_config/
 
 ```
 
 ### 2. 環境変数の設定 (.env)
 
-`.env` ファイルを作成し、自身のドメインや認証情報を設定してください。
+`.env` ファイルを作成し、以下の項目を設定してください。
 
 ```ini
 # --- General ---
-DOMAIN=your-domain.com
+DOMAIN=n8n.japancaviar.jp
+ACME_EMAIL=your-email@example.com
 TZ=Asia/Tokyo
 
 # --- PostgreSQL ---
@@ -89,17 +93,17 @@ POSTGRES_PORT=5432
 N8N_BASIC_AUTH_ACTIVE=true
 N8N_BASIC_AUTH_USER=admin
 N8N_BASIC_AUTH_PASSWORD=secure_n8n_password
-N8N_HOST=your-domain.com
+N8N_HOST=n8n.japancaviar.jp
 N8N_PORT=5678
 N8N_PROTOCOL=https
 
 # --- Auth Manager (Yahoo / NextEngine) ---
 YAHOO_CLIENT_ID=your_yahoo_client_id
 YAHOO_CLIENT_SECRET=your_yahoo_secret
-YAHOO_REDIRECT_URI=https://your-domain.com/auth-manager/yahoo/callback
+YAHOO_REDIRECT_URI=https://n8n.japancaviar.jp/auth-manager/yahoo/callback
 NEXTENGINE_CLIENT_ID=your_ne_id
 NEXTENGINE_CLIENT_SECRET=your_ne_secret
-NEXTENGINE_REDIRECT_URI=https://your-domain.com/auth-manager/nextengine/callback
+NEXTENGINE_REDIRECT_URI=https://n8n.japancaviar.jp/auth-manager/nextengine/callback
 
 # --- Auth Manager Integration ---
 N8N_API_BASE=http://n8n:5678
@@ -111,55 +115,40 @@ ROOT_PATH=/auth-manager
 
 ```
 
-### 3. Caddyfile の作成
+### 3. Caddyfile の配置
 
-リバースプロキシ設定ファイル `Caddyfile` を作成します。これにより SSL が自動適用されます。
+`caddy/Caddyfile` を以下の内容で作成します。
 
 ```caddyfile
 {
-    # SSL証明書期限切れ等の通知用メールアドレス（任意）
-    # email your-email@example.com
+    email {$ACME_EMAIL}
 }
 
 {$DOMAIN} {
+    encode gzip
+    
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "no-referrer-when-downgrade"
+    }
+
     # Auth Manager へのルーティング
-    handle_path /auth-manager* {
+    handle /auth-manager* {
+        uri strip_prefix /auth-manager
         reverse_proxy auth-manager:8000
     }
 
-    # n8n へのルーティング (デフォルト)
-    handle {
-        reverse_proxy n8n:5678
-    }
+    # n8n へのルーティング
+    reverse_proxy n8n:5678
 }
 
 ```
 
-### 4. docker-compose.yml の確認
+### 4. 起動
 
-`caddy` サービスが外部ポートを開放し、設定ファイルを読み込むようになっているか確認してください。
-
-```yaml
-  caddy:
-    image: caddy:2
-    container_name: caddy
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - n8n
-      - auth-manager
-
-```
-
-*(末尾の volumes 定義に `caddy_data`, `caddy_config` も必要です)*
-
-### 5. 起動
+コンテナをバックグラウンドで起動します。
 
 ```bash
 docker-compose up -d
@@ -170,10 +159,16 @@ docker-compose up -d
 
 ## ✅ 動作確認
 
-ブラウザでアクセスして確認します。
+起動後、数秒〜1分程度でSSL証明書が自動発行されます。ブラウザでアクセスして確認します。
 
-1. **n8n**: `https://your-domain.com/`
-2. **Auth Manager**: `https://your-domain.com/auth-manager/`
+1. **n8n**: `https://n8n.japancaviar.jp/`
+* Basic認証（設定時）を経てエディタが表示されること。
+
+
+2. **Auth Manager**: `https://n8n.japancaviar.jp/auth-manager/`
+* Auth Manager のUIまたはレスポンスが表示されること。
+
+
 
 ---
 
@@ -182,16 +177,32 @@ docker-compose up -d
 ### ログの確認
 
 ```bash
+# 全体のログ
 docker-compose logs -f
+
+# 特定サービスのログ（例：n8n）
+docker-compose logs -f n8n
+
+```
+
+### コンテナの再起動（設定変更時など）
+
+```bash
+docker-compose restart caddy
 
 ```
 
 ### データのバックアップ
 
-`volumes/pg_data` と `volumes/n8n_data` ディレクトリを定期的にバックアップすることを推奨します。
+以下のディレクトリが永続化データの本体です。定期的なバックアップを推奨します。
+
+* `./volumes/pg_data` (データベース)
+* `./volumes/n8n_data` (n8nワークフロー定義など)
+* `./auth-manager/volumes/auth_manager_data` (トークンDB)
 
 ---
 
 ## ⚠️ 注意事項
 
-* **認証情報**: `.env` ファイルには API キーやパスワードが含まれるため、Git リポジトリにはコミットしないでください（`.gitignore` に追加推奨）。
+* **セキュリティ**: `.env` ファイルには API キーやパスワードが含まれるため、Git リポジトリにはコミットしないでください（`.gitignore` に追加してください）。
+* **PostgreSQL**: ポート `5432` は `127.0.0.1` にバインドされており、外部からはアクセスできません（SSHトンネル経由などで接続可能です）。
