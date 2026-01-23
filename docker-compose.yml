@@ -44,6 +44,9 @@ services:
       DB_POSTGRESDB_USER: ${POSTGRES_USER}
       DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
       WEBHOOK_URL: "https://${DOMAIN}"
+      N8N_PROXY_HOPS: 1
+      N8N_PAYLOAD_SIZE_MAX: 100
+      N8N_DIAGNOSTICS_ENABLED: "false"
     volumes:
       - ./volumes/n8n_data:/home/node/.n8n
 
